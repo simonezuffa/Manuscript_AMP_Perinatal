@@ -163,26 +163,26 @@ list.keepX = list(Metabo = c(20, 20), Microb = c(20, 20)) # keep top 20
 DIABLO_ante <- mixOmics::block.splsda(X = data_ante, Y = response_ante, 
                                       ncomp = 2, design = design_ante,
                                       keepX = list.keepX)
-perf_DIABLO_ante <- mixOmics::perf(DIABLO_ante, validation = 'loo')
-plot(perf_DIABLO_ante, legend = FALSE)
+perf_DIABLO_ante <- mixOmics::perf(DIABLO_ante, validation = 'loo', progressBar = TRUE)
+#plot(perf_DIABLO_ante, legend = FALSE)
 
 DIABLO_post <- mixOmics::block.splsda(X = data_post, Y = response_post, 
                                       ncomp = 2, design = design_post,
                                       keepX = list.keepX)
-perf_DIABLO_post <- mixOmics::perf(DIABLO_post, validation = 'loo')
-plot(perf_DIABLO_post, legend = FALSE)
+#perf_DIABLO_post <- mixOmics::perf(DIABLO_post, validation = 'loo', progressBar = TRUE)
+#plot(perf_DIABLO_post, legend = FALSE)
 
 DIABLO_ante_ov <- mixOmics::block.splsda(X = data_ante_ov, Y = response_ante, 
                                       ncomp = 2, design = design_ante_ov,
                                       keepX = list.keepX)
-perf_DIABLO_ante_ov <- mixOmics::perf(DIABLO_ante_ov, validation = 'loo')
-plot(perf_DIABLO_ante_ov, legend = FALSE)
+#perf_DIABLO_ante_ov <- mixOmics::perf(DIABLO_ante_ov, validation = 'loo', progressBar = TRUE)
+#plot(perf_DIABLO_ante_ov, legend = FALSE)
 
 DIABLO_post_ov <- mixOmics::block.splsda(X = data_post_ov, Y = response_post, 
                                          ncomp = 2, design = design_post_ov,
                                          keepX = list.keepX)
-perf_DIABLO_post_ov <- mixOmics::perf(DIABLO_post_ov, validation = 'loo')
-plot(perf_DIABLO_post_ov, legend = FALSE)
+#perf_DIABLO_post_ov <- mixOmics::perf(DIABLO_post_ov, validation = 'loo', progressBar = TRUE)
+#plot(perf_DIABLO_post_ov, legend = FALSE)
 
 # Score plots 
 mixOmics::plotIndiv(DIABLO_ante, legend = TRUE,
@@ -206,7 +206,7 @@ mixOmics::plotIndiv(DIABLO_post_ov, legend = TRUE,
                     X.label = "Component 1", Y.label = "Component 2")
 
 # Circos plots 
-#pdf("circosPlot_DIABLO_ante_overlap.pdf", width = 4, height = 4)
+#pdf("circosPlot_DIABLO_ante_overlap.pdf", width = 10, height = 10)
 mixOmics::circosPlot(DIABLO_ante_ov, cutoff = 0.7, line = FALSE, size.labels = 0.5, comp = 1,
                      color.blocks = c("#287DAB", "#E5BF86"), showIntraLinks = FALSE,
                      size.variables = 0.5, size.legend = 0.5)

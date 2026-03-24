@@ -12,7 +12,6 @@ library(MsBackendMgf)
 ##########
 # Import #
 ##########
-data_weight <- read_csv("data_metabolomics/weight.csv")
 metadata <- read_tsv("data_metabolomics/metadata_metabolomics.tsv")
 metadata_filter <- metadata %>%
   dplyr::filter(Mother_Infant == "Mother") %>%
@@ -35,7 +34,7 @@ ba_massql_post <- read_tsv("data_metabolomics/ba_filter_postpartum.tsv")
 # lack of samples for infants, analysis was performed only on maternal fecal samples
 # from hypo1 and hypo2. Cage identify the animals, as they were single housed.
 
-# Feature tables acquired at different timepoints so they will be analyze separately
+# Projects acquired at different timepoints so they will be analyze separately
 feature_MSV000089558 <- read_csv("data_metabolomics/gnps_quant_MSV000089558.csv")
 feature_MSV000092652 <- read_csv("data_metabolomics/gnps_quant_MSV000092652.csv")
 
@@ -59,6 +58,7 @@ annotations_MSV000092652_syn <- read.delim("data_metabolomics/annotations_MSV000
   dplyr::select(2, 15)
 annotations_MSV000092652_syn$X.Scan. <- as.character(annotations_MSV000092652_syn$X.Scan.)
 
+# Combined info
 info_feature_MSV000089558 <- feature_MSV000089558 %>% dplyr::select(1:3,7)
 colnames(info_feature_MSV000089558) <- c("Feature", "mz", "RT", "Corr_ID")
 info_feature_MSV000089558$Feature <- as.character(info_feature_MSV000089558$Feature)
@@ -84,7 +84,7 @@ info_feature_MSV000092652_complete <- info_feature_MSV000092652 %>%
   dplyr::rename(syn_lib = `Compound_Name.y`)
 
 
-# Transpose tables and keep only maternal samples of interest
+# Transpose tables and keep only maternal samples
 data_MSV000089558 <- feature_MSV000089558 %>%
   column_to_rownames("row ID") %>% dplyr::select(contains("Peak")) %>% 
   t() %>% as.data.frame() %>% rownames_to_column("SampleID") %>% 
@@ -111,7 +111,8 @@ data_MSV000092652_filter <- data_MSV000092652 %>%
 ##################
 
 # MSV000089558
-data_sample_clr <- decostand(data_MSV000089558_filter %>% column_to_rownames("SampleID"), method = "rclr")
+data_sample_clr <- decostand(data_MSV000089558_filter %>% column_to_rownames("SampleID"), method = "rclr", impute = FALSE) %>%
+  replace(is.na(.), 0)
 
 # PCA
 PCA_whole <- mixOmics::pca(data_sample_clr %>% select_at(vars(-one_of(nearZeroVar(., names = TRUE)))),
@@ -143,7 +144,8 @@ PCA_MSV000089558_plots_final <- wrap_plots(PCA_MSV000089558_plots, nrow = 3)
 
 
 # MSV000092652
-data_sample_clr <- decostand(data_MSV000092652_filter %>% column_to_rownames("SampleID"), method = "rclr")
+data_sample_clr <- decostand(data_MSV000092652_filter %>% column_to_rownames("SampleID"), method = "rclr", impute = FALSE) %>%
+  replace(is.na(.), 0)
 
 # PCA
 PCA_whole <- mixOmics::pca(data_sample_clr %>% select_at(vars(-one_of(nearZeroVar(., names = TRUE)))),
@@ -484,7 +486,8 @@ data_sample_MSV000089558 <- data_clean3_MSV000089558 %>%
   dplyr::filter(SampleID != "ME_C10_B1") # removed because clustered separately from other animals receiving PBS
 
 # RCLR transformation
-data_sample_clr_MSV000089558 <- decostand(data_sample_MSV000089558 %>% column_to_rownames("SampleID"), method = "rclr")
+data_sample_clr_MSV000089558 <- decostand(data_sample_MSV000089558 %>% column_to_rownames("SampleID"), method = "rclr", impute = FALSE) %>%
+  replace(is.na(.), 0)
 
 # PCA
 PCA_whole <- mixOmics::pca(data_sample_clr_MSV000089558 %>% select_at(vars(-one_of(nearZeroVar(., names = TRUE)))),
@@ -544,7 +547,8 @@ data_sample_MSV000092652 <- data_clean3_MSV000092652 %>%
   dplyr::filter(!(str_detect(pattern = "Mix|Blank", SampleID)))
 
 # RCLR transformation
-data_sample_clr_MSV000092652 <- decostand(data_sample_MSV000092652 %>% column_to_rownames("SampleID"), method = "rclr")
+data_sample_clr_MSV000092652 <- decostand(data_sample_MSV000092652 %>% column_to_rownames("SampleID"), method = "rclr", impute = FALSE) %>%
+  replace(is.na(.), 0)
 
 # PCA
 PCA_whole <- mixOmics::pca(data_sample_clr_MSV000092652 %>% select_at(vars(-one_of(nearZeroVar(., names = TRUE)))),
@@ -600,47 +604,13 @@ permanova_MSV000092652 <- adonis2(dist_metabolites_MSV000092652 ~ AMP + Days_Pos
 # PERMANOVA confirms AMP and time effect
 
 
-##########
-# WEIGHT #
-##########
-
-# Check weight at weaning. Hypo3 is not taken into consideration in this case.
-# Hypo1 was re-run. Keep only second batch since the first batch of animals had a
-# very low weight --> usual weight of animals at PND21 is ~12g
-
-weight_plot <- data_weight %>% dplyr::filter(Hypothesis != 3) %>% 
-  dplyr::filter(!(Hypothesis == 1 & Batch == 1)) %>% 
-  ggboxplot(x = "AMP", y = "Weight", facet.by = "Hypothesis", add = "jitter", 
-            add.params = list(color = "AMP", alpha = 0.8, size = 1),
-            palette = c("#287DAB", "#E5BF86"), title = "Pups weight at weaning",
-            xlab = FALSE, ylab = "Weight (g)", legend = "none") + ylim(0, 25) +
-  theme(plot.title = element_text(size = 10), axis.title = element_text(size = 8),
-        axis.text = element_text(size = 6))
-
-#ggsave(plot = weight_plot, filename = "weight_pups.svg", device = "svg", dpi = "retina", width = 3, height = 2)
-
-model1 <- data_weight %>% dplyr::filter(Hypothesis != 3) %>%
-  dplyr::filter(!(Hypothesis == 1 & Batch == 1)) %>%
-  dplyr::filter(Hypothesis == 1) %>%
-  lm(formula = Weight ~ AMP + Sex + Cage)
-
-summary(model1)
-
-model2 <- data_weight %>% dplyr::filter(Hypothesis != 3) %>%
-  dplyr::filter(!(Hypothesis == 1 & Batch == 1)) %>%
-  dplyr::filter(Hypothesis == 2) %>%
-  lm(formula = Weight ~ AMP + Sex + Cage)
-
-summary(model2)
-
-
 ##################
 # AMP DETECTTION #
 ##################
 
 amp_MSV000089558 <- data_sample_MSV000089558 %>% 
   dplyr::filter(SampleID %in% (metadata_filter %>% dplyr::filter(AMP == "TRUE"))$Sample) %>%
-  dplyr::mutate(Row_Sum = rowSums(select(., -SampleID), na.rm = TRUE)) %>%
+  dplyr::mutate(Row_Sum = rowSums(dplyr::select(., -SampleID), na.rm = TRUE)) %>%
   dplyr::select(SampleID, "13912", "10689", "17242", Row_Sum) %>%
   left_join(metadata_filter, by = c("SampleID" = "Sample")) %>%
   dplyr::mutate(LogAmp = log(`13912` +1)) %>%
@@ -655,7 +625,7 @@ amp_MSV000089558_plot <- amp_MSV000089558 %>%
 
 amp_MSV000092652 <- data_sample_MSV000092652 %>% 
   dplyr::filter(SampleID %in% (metadata_filter %>% dplyr::filter(AMP == "TRUE"))$Sample) %>%
-  dplyr::mutate(Row_Sum = rowSums(select(., -SampleID), na.rm = TRUE)) %>%
+  dplyr::mutate(Row_Sum = rowSums(dplyr::select(., -SampleID), na.rm = TRUE)) %>%
   dplyr::select(SampleID, "13409", "9515", "17000", Row_Sum) %>%
   left_join(metadata_filter, by = c("SampleID" = "Sample")) %>%
   dplyr::mutate(LogAmp = log(`13409` + 1)) %>%
@@ -691,7 +661,8 @@ data_sample_MSV000092652_amp <- data_sample_MSV000092652 %>% dplyr::filter(Sampl
 #############################
 
 # RCLR transformation
-data_sample_clr_MSV000089558_amp <- decostand(data_sample_MSV000089558_amp %>% column_to_rownames("SampleID"), method = "rclr")
+data_sample_clr_MSV000089558_amp <- decostand(data_sample_MSV000089558_amp %>% column_to_rownames("SampleID"), method = "rclr", impute = FALSE) %>%
+  replace(is.na(.), 0)
 
 # PCA
 PCA_whole <- mixOmics::pca(data_sample_clr_MSV000089558_amp %>% select_at(vars(-one_of(nearZeroVar(., names = TRUE)))),
@@ -757,7 +728,7 @@ PLSDA_plot_MSV000089558_amp <- PLSDA_scores_MSV000089558_amp %>%
   theme(plot.title = element_text(size = 10),axis.title = element_text(size = 8),
         axis.text = element_text(size = 5)) + coord_fixed()
 
-Loadings_MSV000089558_amp <- mixOmics::plotLoadings(PLSDA_MSV000089558_amp, plot = FALSE, contrib = "max") %>%
+Loadings_MSV000089558_amp <- mixOmics::plotLoadings(PLSDA_MSV000089558_amp, plot = FALSE, contrib = "max")$X %>%
   rownames_to_column() %>% dplyr::select(rowname, GroupContrib)
 
 #perf_plsda_MSV000089558_amp <- mixOmics::perf(PLSDA_MSV000089558_amp, validation = "loo") 
@@ -772,15 +743,64 @@ VIPs_MSV000089558_amp_Load <- VIPs_MSV000089558_amp_select %>%
   left_join(info_feature_MSV000089558_complete, by = c("ID" = "Feature")) %>% arrange(desc(comp1)) %>%
   dplyr::mutate(dataset = paste("MSV000089558", ID, sep = "_"))
 
-#write_csv(x = VIPs_MSV000089558_amp_Load, file = "Table_S5.csv")
 
+# Perform univariate analysis on features of interest
+data_MSV000089558_uni <- data_sample_clr_MSV000089558_amp %>%
+  dplyr::select(as.character(VIPs_MSV000089558_amp_Load$ID)) %>%
+  rename_with(~ paste0("feature_", .x)) %>%
+  rownames_to_column("Sample") %>% 
+  left_join(metadata_filter %>% dplyr::select(1,4,7,8))
+
+# Columns to loop over
+feature_MSV000089558_uni <- names(data_MSV000089558_uni) %>% 
+  keep(~ str_detect(.x, "^feature_"))
+
+# Run lmer
+lmm_MSV000089558_uni <- feature_MSV000089558_uni %>%
+  map_dfr(function(feat) {
+    # Construct the formula
+    form <- as.formula(paste0("`", feat, "` ~ AMP + Days_Post_Birth + (1|Cage)"))
+    # Fit the model
+    model <- tryCatch({
+      lmerTest::lmer(form, data = data_MSV000089558_uni)
+    }, error = function(e) return(NULL))
+    if (!is.null(model)) {
+      # Extract stats
+      stats <- summary(model)$coefficients
+      # Create dataframe
+      if ("AMPTRUE" %in% rownames(stats)) {
+        return(tibble(
+          ID = feat,
+          estimate = stats["AMPTRUE", "Estimate"],
+          std_error = stats["AMPTRUE", "Std. Error"],
+          df = stats["AMPTRUE", "df"],
+          t_value = stats["AMPTRUE", "t value"],
+          p_value = stats["AMPTRUE", "Pr(>|t|)"]
+        ))
+      }
+    }
+    return(NULL)
+  })
+
+# Add FDR correction
+lmm_MSV000089558_uni <- lmm_MSV000089558_uni %>%
+  dplyr::mutate(p_adj = p.adjust(p_value, method = "BH")) %>%
+  arrange(p_adj) %>% dplyr::mutate(ID = gsub("feature_", "", ID))
+
+
+# Combined multivariate and univariate results
+antepartum_results <- VIPs_MSV000089558_amp_Load %>% left_join(lmm_MSV000089558_uni)
+antepartum_results_filter <- antepartum_results %>% dplyr::filter(p_adj < 0.05)
+
+#write_csv(x = antepartum_results_filter, file = "Table_S5.csv")
 
 #############################
 # AMP EFFECT - MSV000092652 #
 #############################
 
 # RCLR transformation
-data_sample_clr_MSV000092652_amp <- decostand(data_sample_MSV000092652_amp %>% column_to_rownames("SampleID"), method = "rclr")
+data_sample_clr_MSV000092652_amp <- decostand(data_sample_MSV000092652_amp %>% column_to_rownames("SampleID"), method = "rclr", impute = FALSE) %>%
+  replace(is.na(.), 0)
 
 # PCA
 PCA_whole <- mixOmics::pca(data_sample_clr_MSV000092652_amp %>% select_at(vars(-one_of(nearZeroVar(., names = TRUE)))),
@@ -857,7 +877,7 @@ PLSDA_plot_MSV000092652_amp <- PLSDA_scores_MSV000092652_amp %>%
   theme(plot.title = element_text(size = 10),axis.title = element_text(size = 8),
         axis.text = element_text(size = 5)) + coord_fixed()
 
-Loadings_MSV000092652_amp <- mixOmics::plotLoadings(PLSDA_MSV000092652_amp, plot = FALSE, contrib = "max") %>%
+Loadings_MSV000092652_amp <- mixOmics::plotLoadings(PLSDA_MSV000092652_amp, plot = FALSE, contrib = "max")$X %>%
   rownames_to_column() %>% dplyr::select(rowname, GroupContrib)
 
 #perf_plsda_MSV000092652_amp <- mixOmics::perf(PLSDA_MSV000092652_amp, validation = "loo") 
@@ -872,31 +892,79 @@ VIPs_MSV000092652_amp_Load <- VIPs_MSV000092652_amp_select %>%
   left_join(info_feature_MSV000092652_complete, by = c("ID" = "Feature")) %>% arrange(desc(comp1)) %>%
   dplyr::mutate(dataset = paste("MSV000092652", ID, sep = "_"))
 
-#write_csv(x = VIPs_MSV000092652_amp_Load, file = "Table_S6.csv")
 
+# Perform univariate analysis on features of interest
+data_MSV000092652_uni <- data_sample_clr_MSV000092652_amp %>%
+  dplyr::select(as.character(VIPs_MSV000092652_amp_Load$ID)) %>%
+  rename_with(~ paste0("feature_", .x)) %>%
+  rownames_to_column("Sample") %>% 
+  left_join(metadata_filter %>% dplyr::select(1,4,7,8))
+
+# Columns to loop over
+feature_MSV000092652_uni <- names(data_MSV000092652_uni) %>% 
+  keep(~ str_detect(.x, "^feature_"))
+
+# Run lmer
+lmm_MSV000092652_uni <- feature_MSV000092652_uni %>%
+  map_dfr(function(feat) {
+    # Construct the formula
+    form <- as.formula(paste0("`", feat, "` ~ AMP + Days_Post_Birth + (1|Cage)"))
+    # Fit the model
+    model <- tryCatch({
+      lmerTest::lmer(form, data = data_MSV000092652_uni)
+    }, error = function(e) return(NULL))
+    if (!is.null(model)) {
+      # Extract stats
+      stats <- summary(model)$coefficients
+      # Create dataframe
+      if ("AMPTRUE" %in% rownames(stats)) {
+        return(tibble(
+          ID = feat,
+          estimate = stats["AMPTRUE", "Estimate"],
+          std_error = stats["AMPTRUE", "Std. Error"],
+          df = stats["AMPTRUE", "df"],
+          t_value = stats["AMPTRUE", "t value"],
+          p_value = stats["AMPTRUE", "Pr(>|t|)"]
+        ))
+      }
+    }
+    return(NULL)
+  })
+
+# Add FDR correction
+lmm_MSV000092652_uni <- lmm_MSV000092652_uni %>%
+  dplyr::mutate(p_adj = p.adjust(p_value, method = "BH")) %>%
+  arrange(p_adj) %>% dplyr::mutate(ID = gsub("feature_", "", ID))
+
+
+# Combined multivariate and univariate results
+postpartum_results <- VIPs_MSV000092652_amp_Load %>% left_join(lmm_MSV000092652_uni)
+postpartum_results_filter <- postpartum_results %>% dplyr::filter(p_adj < 0.05)
+
+#write_csv(x = postpartum_results_filter, file = "Table_S6.csv")
 
 ############################
 # Check ratios across time #
 ############################
 
-MSV000089558_up_features <- VIPs_MSV000089558_amp_Load %>% dplyr::filter(GroupContrib == TRUE) 
-MSV000089558_down_features <- VIPs_MSV000089558_amp_Load %>% dplyr::filter(GroupContrib == FALSE) 
+MSV000089558_up_features <- antepartum_results_filter %>% dplyr::filter(GroupContrib == TRUE) 
+MSV000089558_down_features <- antepartum_results_filter %>% dplyr::filter(GroupContrib == FALSE) 
 
-MSV000092652_up_features <- VIPs_MSV000092652_amp_Load %>% dplyr::filter(GroupContrib == TRUE) 
-MSV000092652_down_features <- VIPs_MSV000092652_amp_Load %>% dplyr::filter(GroupContrib == FALSE) 
+MSV000092652_up_features <- postpartum_results_filter %>% dplyr::filter(GroupContrib == TRUE) 
+MSV000092652_down_features <- postpartum_results_filter %>% dplyr::filter(GroupContrib == FALSE) 
 
 MSV000089558_ratio <- data_sample_MSV000089558 %>% 
   dplyr::select(SampleID, MSV000089558_up_features$ID, MSV000089558_down_features$ID) %>%
-  dplyr::mutate(AMP_Yes = rowSums(select(., MSV000089558_up_features$ID))) %>%
-  dplyr::mutate(AMP_No = rowSums(select(., MSV000089558_down_features$ID))) %>%
+  dplyr::mutate(AMP_Yes = rowSums(dplyr::select(., MSV000089558_up_features$ID))) %>%
+  dplyr::mutate(AMP_No = rowSums(dplyr::select(., MSV000089558_down_features$ID))) %>%
   dplyr::mutate(Ratio = log(AMP_Yes/AMP_No)) %>% 
   dplyr::select(SampleID, Ratio) %>%
   left_join(metadata_filter, by = c("SampleID" = "Sample"))
 
 MSV000092652_ratio <- data_sample_MSV000092652 %>% 
   dplyr::select(SampleID, MSV000092652_up_features$ID, MSV000092652_down_features$ID) %>%
-  dplyr::mutate(AMP_Yes = rowSums(select(., MSV000092652_up_features$ID))) %>%
-  dplyr::mutate(AMP_No = rowSums(select(., MSV000092652_down_features$ID))) %>%
+  dplyr::mutate(AMP_Yes = rowSums(dplyr::select(., MSV000092652_up_features$ID))) %>%
+  dplyr::mutate(AMP_No = rowSums(dplyr::select(., MSV000092652_down_features$ID))) %>%
   dplyr::mutate(Ratio = log(AMP_Yes/AMP_No)) %>%
   dplyr::select(SampleID, Ratio) %>%
   left_join(metadata_filter, by = c("SampleID" = "Sample"))
@@ -933,22 +1001,18 @@ combined_ratio_plots <- wrap_plots(plot_MSV000089558_ratio, plot_MSV000092652_ra
 # Test each timepoint
 p_value_MSV000089558 <- MSV000089558_ratio %>%
   dplyr::select(Ratio, Days_Post_Birth, AMP) %>%
-  group_by(Days_Post_Birth) %>%
-  nest() %>%
+  group_by(Days_Post_Birth) %>% nest() %>%
   dplyr::mutate(t_test = map(data, ~t.test(Ratio ~ AMP, data = .x)),
-                p_value = map_dbl(t_test, ~.x$p.value)) %>%
-  ungroup() %>%
+                p_value = map_dbl(t_test, ~.x$p.value)) %>% ungroup() %>%
   dplyr::mutate(p_adjust = p.adjust(p_value, method = "BH")) %>%
   dplyr::select(Days_Post_Birth, p_value, p_adjust) %>% arrange(Days_Post_Birth)
 
 p_value_MSV000092652 <- MSV000092652_ratio %>%
   dplyr::filter(!(SampleID %in% c("ME_C6_B3", "ME_C5_B2"))) %>%
   dplyr::select(Ratio, Days_Post_Birth, AMP) %>%
-  group_by(Days_Post_Birth) %>%
-  nest() %>%
+  group_by(Days_Post_Birth) %>% nest() %>%
   dplyr::mutate(t_test = map(data, ~t.test(Ratio ~ AMP, data = .x)),
-                p_value = map_dbl(t_test, ~.x$p.value)) %>%
-  ungroup() %>%
+                p_value = map_dbl(t_test, ~.x$p.value)) %>% ungroup() %>%
   dplyr::mutate(p_adjust = p.adjust(p_value, method = "BH")) %>%
   dplyr::select(Days_Post_Birth, p_value, p_adjust) %>% arrange(Days_Post_Birth)
 
@@ -982,18 +1046,18 @@ network_pairs_info <- network_pairs %>%
   dplyr::filter(rt.x > 0.2 & rt.y > 0.2) %>%
   dplyr::filter(rt.x < 8 & rt.y < 8) %>% 
   dplyr::filter(mz.x < 1500 & mz.y < 1500) %>%
-  dplyr::select(dataset.x, dataset.y, mz.x, mz.y, DeltaMZ, rt.x, rt.y, DeltaRT, Cosine, CLUSTERID1, CLUSTERID2)
+  dplyr::select(dataset.x, dataset.y, mz.x, mz.y, DeltaMZ, rt.x, rt.y, DeltaRT, Cosine, CLUSTERID1, CLUSTERID2) %>%
+  dplyr::mutate(index_new = seq_len(n()))
 
 network_pairs_info %>% ggdensity("DeltaMZ")
 network_pairs_info %>% ggdensity("DeltaRT")
 network_pairs_info %>% ggdensity(x = "Cosine")
 
 network_pairs_info_interest <- network_pairs_info %>% 
-  dplyr::filter(dataset.x %in% VIPs_MSV000089558_amp_Load$dataset) %>%
-  dplyr::filter(dataset.y %in% VIPs_MSV000092652_amp_Load$dataset) %>%
+  dplyr::filter(dataset.x %in% antepartum_results_filter$dataset) %>%
+  dplyr::filter(dataset.y %in% postpartum_results_filter$dataset) %>%
   distinct(dataset.x, .keep_all = TRUE) %>% 
-  distinct(dataset.y, .keep_all = TRUE) %>%
-  dplyr::mutate(index_new = seq_len(n()))
+  distinct(dataset.y, .keep_all = TRUE)
 
 # Extract overlap
 VIPs_MSV000089558_amp_overlap <- network_pairs_info_interest %>% dplyr::select(dataset.x, index_new) %>%
@@ -1028,6 +1092,84 @@ overlap_upset <- UpSetR::upset(fromList(list_overlap), nsets = 8, nintersects = 
                                                                                      "Postpartum AMP"),color = "#E5BF86", active = T)))
 
 
+############################################
+# Reviewer comment on Coincidence Analysis #
+############################################
+
+# Shared space before FDR correction in HYPO1 and HYPO2 --> network_pairs_info (3,886)
+# Filter PLSDA outputs to retain only the shared features
+res_A_shared <- antepartum_results %>% filter(dataset %in% network_pairs_info$dataset.x)
+res_B_shared <- postpartum_results %>% filter(dataset %in% network_pairs_info$dataset.y)
+
+# BH correction is then performed on the shared subset only
+res_A_shared$q_value <- p.adjust(res_A_shared$p_value, method = "BH")
+res_B_shared$q_value <- p.adjust(res_B_shared$p_value, method = "BH")
+
+# Coincidence Math (q^2 logic)
+fdr_threshold <- 0.05
+q_sq <- fdr_threshold^2
+
+# Expected random overlap
+expected_overlap <- nrow(network_pairs_info) * q_sq
+
+# Observed overlap
+significant_A <- res_A_shared %>% dplyr::filter(q_value < fdr_threshold) %>%
+  left_join(network_pairs_info %>% dplyr::select(dataset.x, index_new), by = c("dataset" = "dataset.x"))
+significant_B <- res_B_shared %>% dplyr::filter(q_value < fdr_threshold) %>%
+  left_join(network_pairs_info %>% dplyr::select(dataset.y, index_new), by = c("dataset" = "dataset.y"))
+
+observed_overlap <- length(intersect(significant_A$index_new, significant_B$index_new))
+
+# Combine results
+significant_hypo1 <- significant_A %>%
+  dplyr::filter(index_new %in% intersect(significant_A$index_new, significant_B$index_new))
+significant_hypo2 <- significant_B %>%
+  dplyr::filter(index_new %in% intersect(significant_A$index_new, significant_B$index_new))
+
+combined_sig_eff <- significant_hypo1 %>% left_join(significant_hypo2, by = "index_new") %>%
+  dplyr::mutate(vip_mean = (comp1.x + comp1.y) / 2) %>% arrange(desc(vip_mean)) %>%
+  dplyr::mutate(estimate_mean = (estimate.x + estimate.y) / 2) %>% 
+  dplyr::mutate(concordance = case_when(GroupContrib.x == GroupContrib.y ~ "Yes", TRUE ~ "No")) %>%
+  dplyr::select(1:5,7,8,10:12,14,18:26,34,35,39:44)
+
+#write_csv(x = combined_sig_eff, file = "Table_S7.csv")
+
+
+# Regenerate Upset plot
+hypo1_metab_overlap <- antepartum_results %>%
+  left_join(network_pairs_info %>% dplyr::select(dataset.x, index_new), by = c("dataset" = "dataset.x")) %>%
+  dplyr::filter(ID %in% antepartum_results_filter$ID | index_new %in% combined_sig_eff$index_new) %>%
+  dplyr::mutate(index_new = if_else(is.na(index_new), 
+                                    paste0("hypo_1_", cumsum(is.na(index_new))), 
+                                    as.character(index_new)))
+
+hypo2_metab_overlap <- postpartum_results %>%
+  left_join(network_pairs_info %>% dplyr::select(dataset.y, index_new), by = c("dataset" = "dataset.y")) %>%
+  dplyr::filter(ID %in% postpartum_results_filter$ID | index_new %in% combined_sig_eff$index_new) %>%
+  dplyr::mutate(index_new = if_else(is.na(index_new), 
+                                    paste0("hypo_2_", cumsum(is.na(index_new))), 
+                                    as.character(index_new)))
+
+# Upset plot
+list_overlap <- list(
+  `Antepartum PBS` = (hypo1_metab_overlap %>% dplyr::filter(GroupContrib == "FALSE"))$index_new,
+  `Antepartum AMP` =  (hypo1_metab_overlap %>% dplyr::filter(GroupContrib == "TRUE"))$index_new,
+  `Postpartum PBS` = (hypo2_metab_overlap %>% dplyr::filter(GroupContrib == "FALSE"))$index_new,
+  `Postpartum AMP` = (hypo2_metab_overlap %>% dplyr::filter(GroupContrib == "TRUE"))$index_new)
+
+importnat_upset <- UpSetR::upset(fromList(list_overlap), nsets = 4, nintersects = NA,
+                                 point.size = 1.5, line.size = 1, text.scale = 1, keep.order = TRUE,  
+                                 sets = c("Antepartum PBS", "Antepartum AMP", "Postpartum PBS", "Postpartum AMP"),
+                                 queries = list(list(query = intersects, params = list("Antepartum PBS", 
+                                                                                       "Postpartum PBS"), color = "#287DAB", active = T), 
+                                                list(query = intersects, params = list("Antepartum AMP", 
+                                                                                       "Postpartum AMP"),color = "#E5BF86", active = T)))
+
+#pdf(file="Upset_metabolomics.pdf", width = 4, height = 2.5)
+#importnat_upset
+#dev.off()
+
+
 ######################
 # CONCORDAT FEATURES #
 ######################
@@ -1052,21 +1194,21 @@ canopus_concordace <- read_tsv("data_metabolomics/canopus_concordance_mprint.tsv
 
 concordant_info <- concordant %>% 
   dplyr::mutate(mappingFeatureId = gsub("MSV000089558_", "", dataset.x)) %>%
-  left_join(canopus_concordace)
-
-#write_csv(x = concordant_info, file = "Table_S7.csv")
+  left_join(canopus_concordace) %>%
+  dplyr::filter(index_new %in% combined_sig_eff$index_new) %>%
+  dplyr::filter(!is.na(Canopus))
 
 # Pie chart for NPC Pathway
 concordant_amp_yes <- concordant_info %>% dplyr::filter(`GroupContrib.x` == "TRUE") %>%
   group_by(Canopus) %>% summarise(count_yes = n()) %>% arrange(desc(count_yes)) %>%
-  dplyr::mutate(Canopus = case_when(count_yes < 10 ~ "zOther", TRUE ~ as.character(Canopus))) %>%
+  dplyr::mutate(Canopus = case_when(count_yes < 5 ~ "zOther", TRUE ~ as.character(Canopus))) %>%
   group_by(Canopus) %>% summarise(count_yes = sum(count_yes)) %>%
   dplyr::mutate(ratio = count_yes/sum(count_yes)) %>%
   arrange(desc(ratio))
 
 concordant_amp_no <- concordant_info %>% dplyr::filter(`GroupContrib.x` == "FALSE") %>% 
   group_by(Canopus) %>% summarise(count_no = n()) %>% arrange(desc(count_no)) %>%
-  dplyr::mutate(Canopus = case_when(count_no < 10 ~ "zOther", TRUE ~ as.character(Canopus))) %>%
+  dplyr::mutate(Canopus = case_when(count_no < 5 ~ "zOther", TRUE ~ as.character(Canopus))) %>%
   group_by(Canopus) %>% summarise(count_no = sum(count_no)) %>%
   dplyr::mutate(ratio = count_no/sum(count_no)) %>%
   arrange(desc(ratio))
@@ -1091,6 +1233,7 @@ carn_conc <- concordant_info %>%
   dplyr::filter(str_detect(pattern = "Carnitine", syn_lib) | str_detect(pattern = "carnitines", Canopus)) %>%
   dplyr::mutate(id = gsub(pattern = "MSV000089558_", "", dataset.x)) %>% dplyr::select(-index_new)
 
+
 ##############
 # BILE ACIDS #
 ##############
@@ -1106,6 +1249,8 @@ concordant_ba <- concordant_info %>%
   left_join(ba_massql_pre %>% dplyr::select(1:2), by = c("mappingFeatureId" = "#Scan#")) %>%
   dplyr::filter(!is.na(query_validation))
 
+#write_csv(x = concordant_ba, file = "Table_S9.csv")
+
 # Generate ratio overtime
 ba_up_MSV000089558 <- concordant_ba %>% dplyr::filter(GroupContrib.x == "TRUE") %>%
   dplyr::mutate(dataset.x = gsub("MSV000089558_", "", dataset.x))
@@ -1114,8 +1259,8 @@ ba_down_MSV000089558 <- concordant_ba %>% dplyr::filter(GroupContrib.x == "FALSE
 
 ratio_ba_MSV000089558 <- data_sample_MSV000089558 %>% 
   dplyr::select(SampleID, (concordant_ba %>% dplyr::mutate(dataset.x = gsub("MSV000089558_", "", dataset.x)))$`dataset.x`) %>%
-  dplyr::mutate(AMP_Yes = rowSums(select(., ba_up_MSV000089558$dataset.x)) + 1100.115) %>%
-  dplyr::mutate(AMP_No = rowSums(select(., ba_down_MSV000089558$dataset.x))) %>%
+  dplyr::mutate(AMP_Yes = rowSums(dplyr::select(., ba_up_MSV000089558$dataset.x)) + 1100.115) %>%
+  dplyr::mutate(AMP_No = rowSums(dplyr::select(., ba_down_MSV000089558$dataset.x))) %>%
   dplyr::mutate(Ratio = log(AMP_No/AMP_Yes)) %>%
   left_join(metadata, by = c("SampleID" = "Sample")) %>% 
   mutate(Day = case_when(Days_Post_Birth == "-3" ~ 1, Days_Post_Birth == "-2" ~ 2, Days_Post_Birth == "-1" ~ 3,
@@ -1138,8 +1283,8 @@ ba_down_MSV000092652 <- concordant_ba %>% dplyr::filter(GroupContrib.y == "FALSE
 
 ratio_ba_MSV000092652 <- data_sample_MSV000092652 %>% 
   dplyr::select(SampleID, (concordant_ba %>% dplyr::mutate(dataset.y = gsub("MSV000092652_", "", dataset.y)))$`dataset.y`) %>%
-  dplyr::mutate(AMP_Yes = rowSums(select(., ba_up_MSV000092652$dataset.y)) + 872.1348) %>%
-  dplyr::mutate(AMP_No = rowSums(select(., ba_down_MSV000092652$dataset.y))) %>%
+  dplyr::mutate(AMP_Yes = rowSums(dplyr::select(., ba_up_MSV000092652$dataset.y)) + 872.1348) %>%
+  dplyr::mutate(AMP_No = rowSums(dplyr::select(., ba_down_MSV000092652$dataset.y))) %>%
   dplyr::mutate(Ratio = log(AMP_No/AMP_Yes)) %>%
   left_join(metadata, by = c("SampleID" = "Sample")) %>%
   mutate(Day = case_when(Days_Post_Birth == "1" ~ 4, Days_Post_Birth == "2" ~ 5, Days_Post_Birth == "3" ~ 6, 
@@ -1190,9 +1335,7 @@ adducts <- read_csv("data_metabolomics/data_adducts.csv") %>%
 
 # Reshape to long format
 adducts_long <- adducts %>%
-  pivot_longer(cols = starts_with("Intensity_mz_"),
-               names_to = "mz",
-               values_to = "Intensity") %>%
+  pivot_longer(cols = starts_with("Intensity_mz_"), names_to = "mz", values_to = "Intensity") %>%
   dplyr::mutate(mz = str_replace(mz, "Intensity_mz_", ""),
                 mz = factor(mz, levels = c("678.3508", "695.3790", "700.3328")))
 
@@ -1209,17 +1352,14 @@ adducts_long_offset <- adducts_long %>%
 
 # Plot with both vertical and horizontal offset
 plot_adduuct <- ggplot(adducts_long_offset, aes(x = RT_offset, y = Intensity_offset, color = mz)) +
-  geom_line(size = 0.5) +
-  labs(x = "Retention Time", y = "Intensity",
-       title = "Adducts") +
+  geom_line(size = 0.5) + labs(x = "Retention Time", y = "Intensity", title = "Adducts") +
   scale_y_continuous(labels = scales::scientific) +
-  theme_minimal() +
-  theme(plot.title = element_text(size = 10),
-        axis.title = element_text(size = 9),
-        axis.text = element_text(size = 7),
-        legend.title = element_blank(),
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank())
+  theme_minimal() +theme(plot.title = element_text(size = 10),
+                         axis.title = element_text(size = 9),
+                         axis.text = element_text(size = 7),
+                         legend.title = element_blank(),
+                         panel.grid.major = element_blank(),
+                         panel.grid.minor = element_blank())
 
 #ggsave(plot = plot_adduuct, filename = "plot_adducts.svg", device = "svg", dpi = "retina", width = 5, height = 3)
 
